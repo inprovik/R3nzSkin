@@ -1,6 +1,6 @@
 name: Windows
 
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
   build:
@@ -8,11 +8,21 @@ jobs:
     strategy:
       matrix:
         os: [windows-2022]
-        configuration: [RiotGamesServers, ChinaServer]
+        configuration: [RiotGamesServers]
     steps:
-    - uses: actions/checkout@v3.5.2
-    - name: Add msbuild to PATH
-      uses: microsoft/setup-msbuild@v1.3.1
-    - name: Build
+    - uses: actions/checkout@v4
+    - name: Agregar msbuild al PATH
+      uses: microsoft/setup-msbuild@v2
+    - name: Compilar la DLL
       shell: cmd
       run: msbuild R3nzSkin/R3nzSkin.vcxproj /p:Platform=x64 /p:Configuration=${{ matrix.configuration }}
+    - name: Compilar el inyector
+      shell: cmd
+      run: msbuild R3nzSkin_Injector/R3nzSkin_Injector.vcxproj /p:Platform=x64 /p:Configuration=${{ matrix.configuration }}
+    - name: Subir resultado
+      uses: actions/upload-artifact@v4
+      with:
+        name: R3nzSkin-${{ matrix.configuration }}
+        path: |
+          **/*.dll
+          **/*.exe
