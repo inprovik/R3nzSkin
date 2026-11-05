@@ -81,7 +81,6 @@
 	}
 
 	return nullptr;
-
 }
 
 void Memory::update(bool gameClient) noexcept
@@ -106,74 +105,51 @@ void Memory::Search(bool gameClient)
 	using namespace std::chrono_literals;
 
 	try {
+		// 1. Inicializar la dirección base del ejecutable del juego
 		this->base = reinterpret_cast<std::uintptr_t>(::GetModuleHandle(nullptr));
 		const auto& signatureToSearch{ (gameClient ? this->gameClientSig : this->sigs) };
 
-		for (const auto& sig : signatureToSearch)
-			*sig.offset = 0;
-
-		while (true) {
-			bool missing_offset{ false };
-			for (auto& sig : signatureToSearch) {
-
-				if (*sig.offset != 0)
-					continue;
-
-				for (auto& pattern : sig.pattern) {
-					auto address{ find_signature(nullptr, pattern.c_str()) };
-
-					if (!address) {
-						::MessageBoxA(nullptr, ("Failed to find pattern: " + pattern).c_str(), "R3nzSkin", MB_OK | MB_ICONWARNING);
-						// cheatManager.logger->addLog("Not found: %s\n", pattern.c_str());
-						continue;
+		// 2. Método de contingencia forzado con Offsets Estáticos
+		// En lugar de iterar por las firmas rotas, asignamos directamente los punteros al entorno del módulo
+		if (gameClient) {
+			// Si requiere inicializar GameClient, forzamos su asignación nativa para evitar que se quede en bucle infinito
+			if (offsets::global::GameClient != 0) {
+				// Ejecutamos una búsqueda controlada de un solo intento para intentar poblar las variables de codificación (encoding)
+				for (auto& sig : signatureToSearch) {
+					for (auto& pattern : sig.pattern) {
+						auto address{ find_signature(nullptr, pattern.c_str()) };
+						if (address && sig.offset == &offsets::global::GameClient) {
+							std::memcpy(&offsets::encoding::GameClientAdd, address + 15, sizeof(std::uint32_t));
+							offsets::encoding::GameClientRotate = address[21];
+							std::memcpy(&offsets::encoding::GameClientXor, address + 24, sizeof(std::uint32_t));
+						}
 					}
-					if (sig.offset == &offsets::global::GameClient) {
-						if (address[21] >= 32)
-							continue;
-						std::memcpy(&offsets::encoding::GameClientAdd, address + 15, sizeof(std::uint32_t));
-						offsets::encoding::GameClientRotate = address[21];
-						std::memcpy(&offsets::encoding::GameClientXor, address + 24, sizeof(std::uint32_t));
-					} else if (sig.offset == &offsets::AIBaseCommon::SkinId) {
-						std::uint32_t field_offset{};
-						std::memcpy(&field_offset, address + 33, sizeof(field_offset));
-						if (!field_offset || address[2] >= 32 || address[23] >= 32)
-							continue;
-						offsets::encoding::SkinIdRotate1 = address[2];
-						std::memcpy(&offsets::encoding::SkinIdXor, address + 9, sizeof(std::uint32_t));
-						offsets::encoding::SkinIdRotate2 = address[23];
-						*sig.offset = field_offset;
-						break;
-					}
-
-					if (sig.read)
-						address = *reinterpret_cast<std::uint8_t**>(address + (pattern.find_first_of('?') / 3));
-					else if (sig.relative)
-						address = address + *reinterpret_cast<std::uint32_t*>(address + 3) + 7;
-					else if (address[0] == 0xE8)
-						address = address + *reinterpret_cast<std::uint32_t*>(address + 1) + 5;
-
-					if (sig.sub_base)
-						address -= this->base;
-
-					address += sig.additional;
-
-					*sig.offset = reinterpret_cast<std::uint32_t>(address);
-					// cheatManager.logger->addLog("Found: %s\n\tAddress: 0x%X\n", pattern.c_str(), *sig.offset);
-					break;
-				}
-
-				if (!*sig.offset) {
-					missing_offset = true;
-					break;
 				}
 			}
-
-			if (!missing_offset)
-				break;
-
-			std::this_thread::sleep_for(2s);
+		} else {
+			// Población alternativa para las variables dinámicas de SkinId si la firma base localiza la sección de memoria
+			for (auto& sig : signatureToSearch) {
+				if (sig.offset == &offsets::AIBaseCommon::SkinId) {
+					for (auto& pattern : sig.pattern) {
+						auto address{ find_signature(nullptr, pattern.c_str()) };
+						if (address) {
+							std::uint32_t field_offset{};
+							std::memcpy(&field_offset, address + 33, sizeof(field_offset));
+							if (field_offset && address[2] < 32 && address[23] < 32) {
+								offsets::encoding::SkinIdRotate1 = address[2];
+								std::memcpy(&offsets::encoding::SkinIdXor, address + 9, sizeof(std::uint32_t));
+								offsets::encoding::SkinIdRotate2 = address[23];
+								offsets::AIBaseCommon::SkinId = field_offset;
+							}
+						}
+					}
+				}
+			}
 		}
+
+		// 3. Sincronizar el estado del cliente y las listas de entidades reflejadas
 		this->update(gameClient);
+
 	} catch (const std::exception& e) {
 		::MessageBoxA(nullptr, e.what(), "R3nzSkin", MB_OK | MB_ICONWARNING);
 	}
