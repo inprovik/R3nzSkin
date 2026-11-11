@@ -27,7 +27,7 @@ jobs:
       with:
         name: R3nzSkin-${{ matrix.configuration }}
         path: |
-          x64/${{ matrix.configuration }}/*.dll
-          x64/${{ matrix.configuration }}/*.exe
-          R3nzSkin/x64/${{ matrix.configuration }}/*.dll
-          R3nzSkin/x64/${{ matrix.configuration }}/*.exe
+          **/*.dll
+          **/*.exe
+        if-no-files-found: error
+
