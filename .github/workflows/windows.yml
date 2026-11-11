@@ -20,7 +20,7 @@ jobs:
       
     - name: Build
       shell: cmd
-      run: msbuild R3nzSkin/R3nzSkin.vcxproj /p:Platform=x64 /p:Configuration=${{ matrix.configuration }}
+      run: msbuild R3nzSkin.sln /p:Platform=x64 /p:Configuration=${{ matrix.configuration }}
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
